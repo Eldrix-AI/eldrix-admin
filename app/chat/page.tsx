@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -539,4 +539,12 @@ const ChatPage = () => {
   );
 };
 
-export default ChatPage;
+const ChatSuspensePage = () => {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ChatPage />
+    </Suspense>
+  );
+};
+
+export default ChatSuspensePage;
