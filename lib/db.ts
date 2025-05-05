@@ -1,5 +1,23 @@
 import mysql from "mysql2/promise";
 
+// Define User interface
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  phone: string | null;
+  imageUrl: string | null;
+  description: string;
+  smsConsent: boolean;
+  emailList: boolean;
+  age: number | null;
+  techUsage: string | null;
+  accessibilityNeeds: string | null;
+  preferredContactMethod: string;
+  experienceLevel: string;
+}
+
 // Create a connection pool
 const pool = mysql.createPool({
   host: process.env.DB_HOST || "",
@@ -10,7 +28,10 @@ const pool = mysql.createPool({
   connectionLimit: 10,
 });
 
-export async function query<T>(sql: string, params: any[] = []): Promise<T[]> {
+export async function query<T>(
+  sql: string,
+  params: unknown[] = []
+): Promise<T[]> {
   try {
     // Ensure no undefined values in params
     const safeParams = params.map((param) =>
@@ -23,25 +44,44 @@ export async function query<T>(sql: string, params: any[] = []): Promise<T[]> {
       console.log("Params:", JSON.stringify(safeParams));
     }
 
-    const [rows] = (await pool.execute(sql, safeParams)) as [T[], any];
-    return rows;
+    const [rows] = await pool.execute(sql, safeParams);
+    return rows as unknown as T[];
   } catch (error) {
     console.error("Database query error:", error);
     throw error;
   }
 }
 
-export async function getUserById(id: string) {
-  const users = await query<any>("SELECT * FROM User WHERE id = ?", [id]);
+export async function getUserById(id: string): Promise<User | null> {
+  const users = await query<User>("SELECT * FROM User WHERE id = ?", [id]);
   return users[0] || null;
 }
 
-export async function getUserByEmail(email: string) {
-  const users = await query<any>("SELECT * FROM User WHERE email = ?", [email]);
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const users = await query<User>("SELECT * FROM User WHERE email = ?", [
+    email,
+  ]);
   return users[0] || null;
 }
 
-export async function createUser(userData: any) {
+export interface CreateUserData {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  imageUrl?: string;
+  description?: string;
+  smsConsent: boolean;
+  emailList: boolean;
+  age?: number | null;
+  techUsage?: string | null;
+  accessibilityNeeds?: string | null;
+  preferredContactMethod?: string;
+  experienceLevel?: string;
+}
+
+export async function createUser(userData: CreateUserData): Promise<User> {
   const {
     id,
     name,
@@ -84,10 +124,30 @@ export async function createUser(userData: any) {
 
   console.log("User created:", result);
 
-  return { id, ...userData };
+  return {
+    id,
+    name,
+    email,
+    password,
+    phone: phone || null,
+    imageUrl: imageUrl || null,
+    description,
+    smsConsent,
+    emailList,
+    age,
+    techUsage,
+    accessibilityNeeds,
+    preferredContactMethod,
+    experienceLevel,
+  };
 }
 
-export async function updateUser(id: string, userData: any) {
+export type UpdateUserData = Partial<Omit<User, "id">>;
+
+export async function updateUser(
+  id: string,
+  userData: UpdateUserData
+): Promise<Partial<User>> {
   const fields = Object.keys(userData);
   const values = Object.values(userData);
 
