@@ -29,8 +29,28 @@ interface HelpSession {
   messages: Message[];
 }
 
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  phone: string;
+  password: string;
+  description: string | null;
+  imageUrl: string | null;
+  age: number | null;
+  techUsage: string | null;
+  accessibilityNeeds: string | null;
+  preferredContactMethod: string;
+  experienceLevel: string;
+  emailList: boolean;
+  smsConsent: boolean;
+  notification: boolean;
+  darkMode: boolean;
+}
+
 const ChatPage = () => {
   const [session, setSession] = useState<HelpSession | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [newMessage, setNewMessage] = useState("");
@@ -75,6 +95,26 @@ const ChatPage = () => {
     return () => clearInterval(intervalId);
   }, [sessionId, router, justSentMessage]);
 
+  // Function to fetch user data
+  const fetchUser = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`);
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push("/login");
+          return;
+        }
+        throw new Error(`Error: ${response.status}`);
+      }
+
+      const userData = await response.json();
+      setUser(userData);
+    } catch (err) {
+      console.error("Error fetching user:", err);
+    }
+  };
+
   // Function to fetch session data
   const fetchSession = async (isInitialLoad = false) => {
     if (!sessionId) return;
@@ -94,10 +134,15 @@ const ChatPage = () => {
 
       if (!data) return;
 
-      // On initial load, set the session
+      // On initial load, set the session and fetch user data
       if (isInitialLoad) {
         setSession(data);
         setLoading(false);
+
+        // Fetch user data for this session
+        if (data.userId) {
+          await fetchUser(data.userId);
+        }
 
         // Scroll to bottom on initial load to show newest messages
         setTimeout(() => {
@@ -422,8 +467,41 @@ const ChatPage = () => {
                 {session.title || `Session ${session.id.slice(0, 8)}`}
               </h1>
               <div className="text-sm text-gray-500">
-                User: {session.userId} | Status:{" "}
-                {session.completed ? "Completed" : session.status}
+                {user ? (
+                  <div className="flex items-center gap-2">
+                    <span>User:</span>
+                    <Link
+                      href={`/user/${user.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#2D3E50] hover:text-[#24466d] hover:underline font-medium"
+                    >
+                      {user.name}
+                    </Link>
+                    {user.phone && (
+                      <>
+                        <span>•</span>
+                        <Link
+                          href={`/user/${user.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#2D3E50] hover:text-[#24466d] hover:underline"
+                        >
+                          {user.phone}
+                        </Link>
+                      </>
+                    )}
+                    <span>
+                      • Status:{" "}
+                      {session.completed ? "Completed" : session.status}
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    User: {session.userId} | Status:{" "}
+                    {session.completed ? "Completed" : session.status}
+                  </div>
+                )}
               </div>
             </div>
           </div>
