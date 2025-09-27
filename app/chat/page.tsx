@@ -47,6 +47,9 @@ const ChatPage = () => {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("id");
 
+  // To track if we've just sent a message
+  const [justSentMessage, setJustSentMessage] = useState(false);
+
   // Initial fetch
   useEffect(() => {
     if (!sessionId) {
@@ -59,12 +62,18 @@ const ChatPage = () => {
 
     // Set up polling interval (every 3 seconds)
     const intervalId = setInterval(() => {
-      fetchSession();
+      // Only fetch if we haven't just sent a message (to prevent double display)
+      if (!justSentMessage) {
+        fetchSession();
+      } else {
+        // Reset the flag after skipping one poll
+        setJustSentMessage(false);
+      }
     }, 3000);
 
     // Clean up interval on unmount
     return () => clearInterval(intervalId);
-  }, [sessionId, router]);
+  }, [sessionId, router, justSentMessage]);
 
   // Function to fetch session data
   const fetchSession = async (isInitialLoad = false) => {
@@ -90,7 +99,7 @@ const ChatPage = () => {
         setSession(data);
         setLoading(false);
 
-        // Scroll to bottom once on initial load
+        // Scroll to bottom on initial load to show newest messages
         setTimeout(() => {
           if (messagesContainerRef.current) {
             messagesContainerRef.current.scrollTop =
@@ -98,8 +107,28 @@ const ChatPage = () => {
           }
         }, 100);
       } else if (session) {
-        // For subsequent polls, just update the data
+        // For subsequent polls, just update the data and maintain scroll position
+        const wasAtTop = messagesContainerRef.current?.scrollTop === 0;
+        const prevHeight = messagesContainerRef.current?.scrollHeight || 0;
+
         setSession(data);
+
+        // If we were at the bottom, keep us at the bottom to see newest messages
+        const isAtBottom =
+          messagesContainerRef.current &&
+          messagesContainerRef.current.scrollHeight -
+            messagesContainerRef.current.scrollTop -
+            messagesContainerRef.current.clientHeight <
+            20;
+
+        if (isAtBottom) {
+          setTimeout(() => {
+            if (messagesContainerRef.current) {
+              messagesContainerRef.current.scrollTop =
+                messagesContainerRef.current.scrollHeight;
+            }
+          }, 100);
+        }
       }
     } catch (err) {
       console.error("Error fetching session:", err);
@@ -134,11 +163,39 @@ const ChatPage = () => {
         throw new Error("Failed to send message");
       }
 
-      // Clear input before fetching updated session
+      // Clear input
       setNewMessage("");
 
-      // Refresh session data immediately after sending a message
-      await fetchSession();
+      // Get the new message data from the API response
+      const messageData = await response.json();
+
+      // Update the session data directly without fetching again
+      if (session && messageData) {
+        // Add the new message to the session's messages array and ensure proper sorting
+        const updatedMessages = [...session.messages, messageData];
+
+        // Create a new session object with the updated messages array
+        const updatedSession = {
+          ...session,
+          messages: updatedMessages,
+          lastMessage: newMessage,
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Update the session state
+        setSession(updatedSession);
+
+        // Set flag to skip the next poll to avoid duplication
+        setJustSentMessage(true);
+
+        // Always scroll to bottom after sending a message to see the new message
+        setTimeout(() => {
+          if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTop =
+              messagesContainerRef.current.scrollHeight;
+          }
+        }, 100);
+      }
     } catch (err) {
       console.error("Error sending message:", err);
       setError("Failed to send message");
@@ -195,8 +252,33 @@ const ChatPage = () => {
 
       setUploadProgress(100); // Complete progress
 
-      // Refresh session data to include new message
-      await fetchSession();
+      // Get the new message data from the API response
+      const messageData = await messageResponse.json();
+
+      // Update the session data directly without fetching again
+      if (session && messageData) {
+        // Create a new session object with the new message added
+        const updatedSession = {
+          ...session,
+          messages: [...session.messages, messageData],
+          lastMessage: imageContent,
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Update the session state
+        setSession(updatedSession);
+
+        // Set flag to skip the next poll to avoid duplication
+        setJustSentMessage(true);
+
+        // Always scroll to bottom after sending a message to see the new message
+        setTimeout(() => {
+          if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTop =
+              messagesContainerRef.current.scrollHeight;
+          }
+        }, 100);
+      }
     } catch (err) {
       console.error("Error handling image:", err);
       setError("Failed to upload and send image");
@@ -389,28 +471,35 @@ const ChatPage = () => {
                 No messages in this session yet.
               </div>
             ) : (
-              session.messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${
-                    message.isAdmin ? "justify-end" : "justify-start"
-                  }`}
-                >
+              // Sort messages by timestamp and display from oldest to newest (top to bottom)
+              [...session.messages]
+                .sort(
+                  (a, b) =>
+                    new Date(a.createdAt).getTime() -
+                    new Date(b.createdAt).getTime()
+                )
+                .map((message) => (
                   <div
-                    className={`max-w-[75%] rounded-lg p-3 ${
-                      message.isAdmin
-                        ? "bg-[#2D3E50] text-white"
-                        : "bg-gray-100 text-gray-800"
+                    key={message.id}
+                    className={`flex ${
+                      message.isAdmin ? "justify-end" : "justify-start"
                     }`}
                   >
-                    <div className="text-sm mb-1">
-                      {message.isAdmin ? "Admin" : "User"} •{" "}
-                      {formatDate(message.createdAt)}
+                    <div
+                      className={`max-w-[75%] rounded-lg p-3 ${
+                        message.isAdmin
+                          ? "bg-[#2D3E50] text-white"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      <div className="text-sm mb-1">
+                        {message.isAdmin ? "Admin" : "User"} •{" "}
+                        {formatDate(message.createdAt)}
+                      </div>
+                      {renderMessageContent(message.content)}
                     </div>
-                    {renderMessageContent(message.content)}
                   </div>
-                </div>
-              ))
+                ))
             )}
           </div>
 

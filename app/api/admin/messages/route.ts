@@ -2,6 +2,7 @@ import { helpSessions } from "../../../../db/index.mjs";
 import { messages } from "../../../../db/index.mjs";
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
+import fetch from "node-fetch";
 
 interface MessageData {
   id: string;
@@ -79,6 +80,29 @@ export async function POST(request: NextRequest) {
 
     // Update session
     await helpSessions.updateHelpSession(helpSessionId, updateData);
+
+    // Check if this is an admin message to an SMS session - if so, forward it to the external API
+    if (isAdmin && session.type === "sms") {
+      try {
+        await fetch("https://913b7cf1fbbc.ngrok-free.app/twilio/sms/respond", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sessionId: helpSessionId,
+            message: content,
+            userId: session.userId,
+          }),
+        });
+        console.log(
+          `Forwarded SMS message for session ${helpSessionId} to external API`
+        );
+      } catch (error) {
+        console.error("Error forwarding SMS message:", error);
+        // Continue with the response even if forwarding fails
+      }
+    }
 
     return NextResponse.json(newMessage, { status: 201 });
   } catch (error) {

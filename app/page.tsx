@@ -74,12 +74,15 @@ const Dashboard = () => {
     }
   };
 
-  // Filter active/pending sessions by status
+  // Filter active/pending/ongoing sessions by status
   const openSessions = sessions.filter(
     (session) => !session.completed && session.status === "open"
   );
   const pendingSessions = sessions.filter(
     (session) => !session.completed && session.status === "pending"
+  );
+  const ongoingSessions = sessions.filter(
+    (session) => !session.completed && session.status === "ongoing"
   );
 
   // Filter completed sessions
@@ -185,6 +188,48 @@ const Dashboard = () => {
                         {session.title || `Session ${session.id.slice(0, 8)}`}
                       </h3>
                       <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                        {session.status}
+                      </span>
+                    </div>
+                    <div className="mb-2 text-sm text-gray-600">
+                      User: {session.userId}
+                    </div>
+                    <div className="mb-2 text-sm text-gray-600">
+                      Type: {session.type || "N/A"}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Last updated: {formatDate(session.updatedAt)}
+                    </div>
+                    <div className="mt-3 text-sm font-medium text-[#2D3E50]">
+                      {session.messages.length} messages
+                    </div>
+                    {session.lastMessage && (
+                      <div className="mt-2 text-sm text-gray-700 line-clamp-2">
+                        Last message: {session.lastMessage}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Ongoing Sessions - Purple section */}
+        {ongoingSessions.length > 0 && (
+          <section className="mb-10">
+            <h2 className="text-2xl font-bold text-[#2D3E50] mb-4">
+              Ongoing Sessions ({ongoingSessions.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {ongoingSessions.map((session) => (
+                <Link href={`/chat?id=${session.id}`} key={session.id}>
+                  <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition cursor-pointer border-l-4 border-purple-500">
+                    <div className="flex justify-between items-start">
+                      <h3 className="text-xl font-semibold text-[#2D3E50] mb-2">
+                        {session.title || `Session ${session.id.slice(0, 8)}`}
+                      </h3>
+                      <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
                         {session.status}
                       </span>
                     </div>

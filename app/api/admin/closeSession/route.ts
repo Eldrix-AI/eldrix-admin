@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { helpSessions, messages } from "../../../../db/index.mjs";
 import OpenAI from "openai";
+import fetch from "node-fetch";
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -120,6 +121,36 @@ export async function POST(request: NextRequest) {
       status: "completed",
       updatedAt: new Date(),
     });
+
+    // If this is an SMS session, send a closing message to the external API
+    if (helpSession.type === "sms") {
+      try {
+        // Prepare closing message
+        const closingMessage =
+          "This support session has been closed. If you need further assistance, please send a new message to start a new support session.";
+
+        // Send to the external SMS API
+        await fetch("https://913b7cf1fbbc.ngrok-free.app/twilio/sms/respond", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sessionId: helpSessionId,
+            message: closingMessage,
+            userId: helpSession.userId,
+            sessionClosed: true,
+          }),
+        });
+
+        console.log(
+          `Sent closing SMS notification for session ${helpSessionId}`
+        );
+      } catch (error) {
+        console.error("Error sending SMS closing notification:", error);
+        // Continue with the response even if SMS notification fails
+      }
+    }
 
     return NextResponse.json({
       success: true,
