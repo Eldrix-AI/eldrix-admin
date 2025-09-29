@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
           "This support session has been closed. If you need further assistance, please send a new message to start a new support session.";
 
         // Send to the external SMS API
-        await fetch("https://913b7cf1fbbc.ngrok-free.app/twilio/sms/respond", {
+        await fetch("https://f3de0bfe86fd.ngrok-free.app/twilio/sms/respond", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

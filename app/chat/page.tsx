@@ -387,6 +387,11 @@ const ChatPage = () => {
     // Check if the content contains an image link in bracket format: [Image: url]
     const bracketImageMatch = content.match(/\[Image: (https:\/\/[^\s\]]+)\]/);
 
+    // Check if the content contains an image link in numbered format: [Image 1: url]
+    const numberedImageMatch = content.match(
+      /\[Image \d+: (https:\/\/[^\s\]]+)\]/
+    );
+
     if (markdownImageMatch && markdownImageMatch[1]) {
       const imageUrl = markdownImageMatch[1];
       return (
@@ -420,9 +425,53 @@ const ChatPage = () => {
           </div>
         </div>
       );
+    } else if (numberedImageMatch && numberedImageMatch[1]) {
+      const imageUrl = numberedImageMatch[1];
+      return (
+        <div>
+          <div className="mb-2">
+            <img
+              src={imageUrl}
+              alt="Shared image"
+              className="max-w-full rounded-lg max-h-80 object-contain"
+            />
+          </div>
+          <div>
+            {content.replace(
+              /\[Image \d+: (https:\/\/[^\s\]]+)\]/,
+              "Image attachment"
+            )}
+          </div>
+        </div>
+      );
     }
 
-    return <div className="whitespace-pre-wrap">{content}</div>;
+    // Make URLs clickable
+    const makeLinksClickable = (text: string) => {
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const parts = text.split(urlRegex);
+
+      return parts.map((part, index) => {
+        if (urlRegex.test(part)) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 underline break-all"
+            >
+              {part}
+            </a>
+          );
+        }
+        return part;
+      });
+    };
+
+    return (
+      <div className="whitespace-pre-wrap">{makeLinksClickable(content)}</div>
+    );
   };
 
   if (loading) {

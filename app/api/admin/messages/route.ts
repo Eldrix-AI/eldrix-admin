@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
     // If this is an admin message and the session is still pending, update to "open"
     if (isAdmin && session.status === "pending") {
       updateData.status = "open";
+      updateData.completed = false; // Ensure completed is false when status is open
       console.log(
         `Updating session ${helpSessionId} status from pending to open`
       );
@@ -84,19 +85,57 @@ export async function POST(request: NextRequest) {
     // Check if this is an admin message to an SMS session - if so, forward it to the external API
     if (isAdmin && session.type === "sms") {
       try {
-        await fetch("https://913b7cf1fbbc.ngrok-free.app/twilio/sms/respond", {
+        // Extract image URL from content if it exists
+        let imageUrl = null;
+        let textContent = content;
+
+        // Check for different image formats in the content
+        const markdownImageMatch = content.match(
+          /!\[Image\]\((https:\/\/[^\s)]+)\)/
+        );
+        const bracketImageMatch = content.match(
+          /\[Image: (https:\/\/[^\s\]]+)\]/
+        );
+        const numberedImageMatch = content.match(
+          /\[Image \d+: (https:\/\/[^\s\]]+)\]/
+        );
+
+        if (markdownImageMatch && markdownImageMatch[1]) {
+          imageUrl = markdownImageMatch[1];
+          textContent = content.replace(
+            /!\[Image\]\((https:\/\/[^\s)]+)\)/,
+            "Image attachment"
+          );
+        } else if (bracketImageMatch && bracketImageMatch[1]) {
+          imageUrl = bracketImageMatch[1];
+          textContent = content.replace(
+            /\[Image: (https:\/\/[^\s\]]+)\]/,
+            "Image attachment"
+          );
+        } else if (numberedImageMatch && numberedImageMatch[1]) {
+          imageUrl = numberedImageMatch[1];
+          textContent = content.replace(
+            /\[Image \d+: (https:\/\/[^\s\]]+)\]/,
+            "Image attachment"
+          );
+        }
+
+        await fetch("https://f3de0bfe86fd.ngrok-free.app/twilio/sms/respond", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
             sessionId: helpSessionId,
-            message: content,
+            message: textContent,
+            imageUrl: imageUrl, // Include image URL if present
             userId: session.userId,
           }),
         });
         console.log(
-          `Forwarded SMS message for session ${helpSessionId} to external API`
+          `Forwarded SMS message for session ${helpSessionId} to external API${
+            imageUrl ? " with image" : ""
+          }`
         );
       } catch (error) {
         console.error("Error forwarding SMS message:", error);

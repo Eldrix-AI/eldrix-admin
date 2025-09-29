@@ -16,8 +16,24 @@ export async function GET(request: NextRequest) {
     // Get all help sessions with their messages
     const sessions = await helpSessions.getAllHelpSessionsWithMessages();
 
+    // Fix data inconsistency: if status is "open" but completed is true, set completed to false
+    const fixedSessions = await Promise.all(
+      sessions.map(async (session: any) => {
+        if (session.status === "open" && session.completed === true) {
+          console.log(
+            `Fixing session ${session.id}: status is open but completed is true`
+          );
+          await helpSessions.updateHelpSession(session.id, {
+            completed: false,
+          });
+          return { ...session, completed: false };
+        }
+        return session;
+      })
+    );
+
     // Sort sessions: open first, then pending, then completed
-    const sortedSessions = sessions.sort(
+    const sortedSessions = fixedSessions.sort(
       (
         a: {
           status: string;
