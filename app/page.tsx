@@ -245,16 +245,31 @@ const Dashboard = () => {
     }
   };
 
-  // Filter active/pending/ongoing sessions by status
-  const openSessions = sessions.filter(
-    (session) => !session.completed && session.status === "open"
-  );
-  const pendingSessions = sessions.filter(
-    (session) => !session.completed && session.status === "pending"
-  );
-  const ongoingSessions = sessions.filter(
-    (session) => !session.completed && session.status === "ongoing"
-  );
+  // Filter active/pending/ongoing sessions by status and sort by priority
+  const openSessions = sessions
+    .filter((session) => !session.completed && session.status === "open")
+    .sort((a, b) => {
+      // High priority first, then by updatedAt
+      if (a.priority === "high" && b.priority !== "high") return -1;
+      if (b.priority === "high" && a.priority !== "high") return 1;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  const pendingSessions = sessions
+    .filter((session) => !session.completed && session.status === "pending")
+    .sort((a, b) => {
+      // High priority first, then by updatedAt
+      if (a.priority === "high" && b.priority !== "high") return -1;
+      if (b.priority === "high" && a.priority !== "high") return 1;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  const ongoingSessions = sessions
+    .filter((session) => !session.completed && session.status === "ongoing")
+    .sort((a, b) => {
+      // High priority first, then by updatedAt
+      if (a.priority === "high" && b.priority !== "high") return -1;
+      if (b.priority === "high" && a.priority !== "high") return 1;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
 
   // Filter completed sessions
   const completedSessions = sessions.filter((session) => session.completed);
@@ -330,14 +345,39 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {openSessions.map((session) => (
                 <Link href={`/chat?id=${session.id}`} key={session.id}>
-                  <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition cursor-pointer border-l-4 border-blue-500">
+                  <div
+                    className={`bg-white p-6 rounded-lg shadow hover:shadow-md transition cursor-pointer border-l-4 ${
+                      session.priority === "high"
+                        ? "border-red-500 bg-red-50 shadow-red-200"
+                        : "border-blue-500"
+                    }`}
+                  >
                     <div className="flex justify-between items-start">
-                      <h3 className="text-xl font-semibold text-[#2D3E50] mb-2">
+                      <h3
+                        className={`text-xl font-semibold mb-2 ${
+                          session.priority === "high"
+                            ? "text-red-800"
+                            : "text-[#2D3E50]"
+                        }`}
+                      >
                         {session.title || `Session ${session.id.slice(0, 8)}`}
                       </h3>
-                      <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                        {session.status}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        {session.priority === "high" && (
+                          <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 font-bold animate-pulse">
+                            HIGH PRIORITY
+                          </span>
+                        )}
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full ${
+                            session.priority === "high"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-blue-100 text-blue-800"
+                          }`}
+                        >
+                          {session.status}
+                        </span>
+                      </div>
                     </div>
                     <div className="mb-2 text-sm text-gray-600">
                       User: {session.userId}
@@ -348,7 +388,13 @@ const Dashboard = () => {
                     <div className="text-sm text-gray-500">
                       Last updated: {formatDate(session.updatedAt)}
                     </div>
-                    <div className="mt-3 text-sm font-medium text-blue-600">
+                    <div
+                      className={`mt-3 text-sm font-medium ${
+                        session.priority === "high"
+                          ? "text-red-600"
+                          : "text-blue-600"
+                      }`}
+                    >
                       {session.messages.length} messages
                     </div>
                     {session.lastMessage && (
@@ -372,14 +418,39 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {pendingSessions.map((session) => (
                 <Link href={`/chat?id=${session.id}`} key={session.id}>
-                  <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition cursor-pointer border-l-4 border-[#2D3E50]">
+                  <div
+                    className={`bg-white p-6 rounded-lg shadow hover:shadow-md transition cursor-pointer border-l-4 ${
+                      session.priority === "high"
+                        ? "border-red-500 bg-red-50 shadow-red-200"
+                        : "border-[#2D3E50]"
+                    }`}
+                  >
                     <div className="flex justify-between items-start">
-                      <h3 className="text-xl font-semibold text-[#2D3E50] mb-2">
+                      <h3
+                        className={`text-xl font-semibold mb-2 ${
+                          session.priority === "high"
+                            ? "text-red-800"
+                            : "text-[#2D3E50]"
+                        }`}
+                      >
                         {session.title || `Session ${session.id.slice(0, 8)}`}
                       </h3>
-                      <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
-                        {session.status}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        {session.priority === "high" && (
+                          <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 font-bold animate-pulse">
+                            HIGH PRIORITY
+                          </span>
+                        )}
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full ${
+                            session.priority === "high"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-yellow-100 text-yellow-800"
+                          }`}
+                        >
+                          {session.status}
+                        </span>
+                      </div>
                     </div>
                     <div className="mb-2 text-sm text-gray-600">
                       User: {session.userId}
@@ -390,7 +461,13 @@ const Dashboard = () => {
                     <div className="text-sm text-gray-500">
                       Last updated: {formatDate(session.updatedAt)}
                     </div>
-                    <div className="mt-3 text-sm font-medium text-[#2D3E50]">
+                    <div
+                      className={`mt-3 text-sm font-medium ${
+                        session.priority === "high"
+                          ? "text-red-600"
+                          : "text-[#2D3E50]"
+                      }`}
+                    >
                       {session.messages.length} messages
                     </div>
                     {session.lastMessage && (
@@ -414,14 +491,39 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {ongoingSessions.map((session) => (
                 <Link href={`/chat?id=${session.id}`} key={session.id}>
-                  <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition cursor-pointer border-l-4 border-purple-500">
+                  <div
+                    className={`bg-white p-6 rounded-lg shadow hover:shadow-md transition cursor-pointer border-l-4 ${
+                      session.priority === "high"
+                        ? "border-red-500 bg-red-50 shadow-red-200"
+                        : "border-purple-500"
+                    }`}
+                  >
                     <div className="flex justify-between items-start">
-                      <h3 className="text-xl font-semibold text-[#2D3E50] mb-2">
+                      <h3
+                        className={`text-xl font-semibold mb-2 ${
+                          session.priority === "high"
+                            ? "text-red-800"
+                            : "text-[#2D3E50]"
+                        }`}
+                      >
                         {session.title || `Session ${session.id.slice(0, 8)}`}
                       </h3>
-                      <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
-                        {session.status}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        {session.priority === "high" && (
+                          <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 font-bold animate-pulse">
+                            HIGH PRIORITY
+                          </span>
+                        )}
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full ${
+                            session.priority === "high"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-purple-100 text-purple-800"
+                          }`}
+                        >
+                          {session.status}
+                        </span>
+                      </div>
                     </div>
                     <div className="mb-2 text-sm text-gray-600">
                       User: {session.userId}
@@ -432,7 +534,13 @@ const Dashboard = () => {
                     <div className="text-sm text-gray-500">
                       Last updated: {formatDate(session.updatedAt)}
                     </div>
-                    <div className="mt-3 text-sm font-medium text-[#2D3E50]">
+                    <div
+                      className={`mt-3 text-sm font-medium ${
+                        session.priority === "high"
+                          ? "text-red-600"
+                          : "text-[#2D3E50]"
+                      }`}
+                    >
                       {session.messages.length} messages
                     </div>
                     {session.lastMessage && (

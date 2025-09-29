@@ -530,7 +530,13 @@ const ChatPage = () => {
 
   return (
     <main className="min-h-screen bg-[#FDF9F4] flex flex-col">
-      <header className="bg-white shadow py-4 px-6">
+      <header
+        className={`shadow py-4 px-6 ${
+          session.priority === "high"
+            ? "bg-red-50 border-l-4 border-red-500"
+            : "bg-white"
+        }`}
+      >
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <Link href="/">
@@ -547,9 +553,22 @@ const ChatPage = () => {
             </Link>
             <div className="h-6 border-r border-gray-300"></div>
             <div>
-              <h1 className="text-xl font-semibold text-[#2D3E50]">
-                {session.title || `Session ${session.id.slice(0, 8)}`}
-              </h1>
+              <div className="flex items-center gap-3 mb-1">
+                <h1
+                  className={`text-xl font-semibold ${
+                    session.priority === "high"
+                      ? "text-red-800"
+                      : "text-[#2D3E50]"
+                  }`}
+                >
+                  {session.title || `Session ${session.id.slice(0, 8)}`}
+                </h1>
+                {session.priority === "high" && (
+                  <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 font-bold animate-pulse">
+                    HIGH PRIORITY
+                  </span>
+                )}
+              </div>
               <div className="text-sm text-gray-500">
                 {user ? (
                   <div className="flex items-center gap-2">
@@ -579,11 +598,17 @@ const ChatPage = () => {
                       • Status:{" "}
                       {session.completed ? "Completed" : session.status}
                     </span>
+                    {session.priority && session.priority !== "high" && (
+                      <span>• Priority: {session.priority}</span>
+                    )}
                   </div>
                 ) : (
                   <div>
                     User: {session.userId} | Status:{" "}
                     {session.completed ? "Completed" : session.status}
+                    {session.priority && session.priority !== "high" && (
+                      <span> | Priority: {session.priority}</span>
+                    )}
                   </div>
                 )}
               </div>
