@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        await fetch("https://f3de0bfe86fd.ngrok-free.app/twilio/sms/respond", {
+        await fetch("https://eldrix-ai.vercel.app/twilio/sms/respond", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
