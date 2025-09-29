@@ -48,6 +48,14 @@ interface User {
   darkMode: boolean;
 }
 
+interface Recording {
+  key: string;
+  url: string;
+  size: number;
+  lastModified: string;
+  fileName: string;
+}
+
 const ChatPage = () => {
   const [session, setSession] = useState<HelpSession | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -60,6 +68,9 @@ const ChatPage = () => {
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [showRecordings, setShowRecordings] = useState(false);
+  const [loadingRecordings, setLoadingRecordings] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -112,6 +123,30 @@ const ChatPage = () => {
       setUser(userData);
     } catch (err) {
       console.error("Error fetching user:", err);
+    }
+  };
+
+  // Function to fetch recordings
+  const fetchRecordings = async () => {
+    setLoadingRecordings(true);
+    try {
+      const response = await fetch("/api/admin/recordings");
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push("/login");
+          return;
+        }
+        throw new Error(`Error: ${response.status}`);
+      }
+
+      const recordingsData = await response.json();
+      setRecordings(recordingsData);
+    } catch (err) {
+      console.error("Error fetching recordings:", err);
+      setError("Failed to load recordings");
+    } finally {
+      setLoadingRecordings(false);
     }
   };
 
@@ -702,6 +737,78 @@ const ChatPage = () => {
                 </div>
               </div>
             </form>
+          )}
+        </div>
+      </div>
+
+      {/* Recordings Section */}
+      <div className="w-full p-4">
+        <div className="bg-white rounded-lg shadow-lg">
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-[#2D3E50]">
+                Call Recordings
+              </h3>
+              <button
+                onClick={() => {
+                  setShowRecordings(!showRecordings);
+                  if (!showRecordings && recordings.length === 0) {
+                    fetchRecordings();
+                  }
+                }}
+                className="px-3 py-1 text-sm bg-[#2D3E50] text-white rounded hover:bg-[#24466d] transition"
+              >
+                {showRecordings ? "Hide" : "Show"} Recordings
+              </button>
+            </div>
+          </div>
+
+          {showRecordings && (
+            <div className="p-4">
+              {loadingRecordings ? (
+                <div className="text-center text-gray-500 py-4">
+                  Loading recordings...
+                </div>
+              ) : recordings.length === 0 ? (
+                <div className="text-center text-gray-500 py-4">
+                  No recordings found.
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {recordings.map((recording) => (
+                    <div
+                      key={recording.key}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">
+                          {recording.fileName}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {new Date(recording.lastModified).toLocaleString()} •{" "}
+                          {(recording.size / 1024 / 1024).toFixed(2)} MB
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                        <audio controls className="h-8">
+                          <source src={recording.url} type="audio/mpeg" />
+                          <source src={recording.url} type="audio/wav" />
+                          Your browser does not support the audio element.
+                        </audio>
+                        <a
+                          href={recording.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition"
+                        >
+                          Download
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
