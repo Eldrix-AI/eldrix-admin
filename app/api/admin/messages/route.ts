@@ -35,7 +35,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if the session exists
-    const session = await helpSessions.getHelpSessionById(helpSessionId);
+    const session = (await helpSessions.getHelpSessionById(
+      helpSessionId
+    )) as any;
 
     if (!session) {
       return NextResponse.json(
@@ -62,7 +64,7 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date(),
     };
 
-    const newMessage = await messages.createMessage(messageData);
+    const newMessage = (await messages.createMessage(messageData)) as any;
 
     // Update session fields
     const updateData: any = {
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
     };
 
     // If this is an admin message and the session is still pending, update to "open"
-    if (isAdmin && session.status === "pending") {
+    if (isAdmin && (session as any).status === "pending") {
       updateData.status = "open";
       updateData.completed = false; // Ensure completed is false when status is open
       console.log(
@@ -83,7 +85,7 @@ export async function POST(request: NextRequest) {
     await helpSessions.updateHelpSession(helpSessionId, updateData);
 
     // Check if this is an admin message to an SMS session - if so, forward it to the external API
-    if (isAdmin && session.type === "sms") {
+    if (isAdmin && (session as any).type === "sms") {
       try {
         // Extract image URL from content if it exists
         let imageUrl = null;
@@ -129,7 +131,7 @@ export async function POST(request: NextRequest) {
             sessionId: helpSessionId,
             message: textContent,
             imageUrl: imageUrl, // Include image URL if present
-            userId: session.userId,
+            userId: (session as any).userId,
           }),
         });
         console.log(

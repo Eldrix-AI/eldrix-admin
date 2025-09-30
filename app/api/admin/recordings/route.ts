@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { list } from "@vercel/blob";
 
 export const dynamic = "force-dynamic";
-
-// Initialize S3 client
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "us-east-2",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
-  },
-});
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,23 +15,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const command = new ListObjectsV2Command({
-      Bucket: "deepskygallery",
-      Prefix: "call-recordings/",
+    // List recordings from Vercel Blob
+    const { blobs } = await list({
+      prefix: "call-recordings/",
+      token: process.env.BLOB_READ_WRITE_TOKEN,
     });
 
-    const response = await s3Client.send(command);
-
-    if (!response.Contents) {
+    if (!blobs || blobs.length === 0) {
       return NextResponse.json([]);
     }
 
-    const recordings = response.Contents.map((item) => ({
-      key: item.Key,
-      url: `https://deepskygallery.s3.us-east-2.amazonaws.com/${item.Key}`,
-      size: item.Size,
-      lastModified: item.LastModified,
-      fileName: item.Key?.split("/").pop() || item.Key,
+    const recordings = blobs.map((blob) => ({
+      key: blob.pathname,
+      url: blob.url,
+      size: blob.size,
+      lastModified: blob.uploadedAt,
+      fileName: blob.pathname?.split("/").pop() || blob.pathname,
     }));
 
     // Sort by last modified date (newest first)

@@ -1,14 +1,16 @@
-import mysql from "mysql2/promise";
+import pkg from "pg";
+const { Pool } = pkg;
 
 // Create a connection pool
-const pool = mysql.createPool({
-  host:
-    process.env.DB_HOST || "eldrix.c3u0owce2vpi.us-east-2.rds.amazonaws.com",
-  user: process.env.DB_USER || "admin",
-  password: process.env.DB_PASSWORD || "B99U7lu2sYcOzCk1HWSG",
-  database: process.env.DB_NAME || "eldrix-prod",
-  port: parseInt(process.env.DB_PORT || "3306"),
-  connectionLimit: 10,
+const pool = new Pool({
+  connectionString:
+    process.env.DATABASE_URL ||
+    "postgresql://neondb_owner:npg_R4PlognbL8qm@ep-winter-river-adogkt3g-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require",
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  connectionTimeoutMillis: 30000, // 30 seconds
+  idleTimeoutMillis: 30000, // 30 seconds
+  query_timeout: 30000, // 30 seconds
 });
 
 /**
@@ -22,8 +24,8 @@ async function query(sql, params = []) {
     console.log("SQL:", sql);
     console.log("Params:", JSON.stringify(safeParams));
 
-    const [rows] = await pool.execute(sql, safeParams);
-    return rows;
+    const result = await pool.query(sql, safeParams);
+    return result.rows;
   } catch (error) {
     console.error("Database query error:", error);
     throw error;
@@ -34,21 +36,25 @@ async function query(sql, params = []) {
  * Get all help sessions
  */
 export async function getAllHelpSessions() {
-  return await query("SELECT * FROM HelpSession");
+  return await query('SELECT * FROM "HelpSession"');
 }
 
 /**
  * Get all help sessions for a user
  */
 export async function getHelpSessionsByUserId(userId) {
-  return await query("SELECT * FROM HelpSession WHERE userId = ?", [userId]);
+  return await query('SELECT * FROM "HelpSession" WHERE "userId" = $1', [
+    userId,
+  ]);
 }
 
 /**
  * Get a help session by ID
  */
 export async function getHelpSessionById(id) {
-  const sessions = await query("SELECT * FROM HelpSession WHERE id = ?", [id]);
+  const sessions = await query('SELECT * FROM "HelpSession" WHERE id = $1', [
+    id,
+  ]);
   return sessions[0] || null;
 }
 
@@ -71,8 +77,9 @@ export async function createHelpSession(sessionData) {
   } = sessionData;
 
   const result = await query(
-    `INSERT INTO HelpSession (id, userId, title, sessionRecap, completed, lastMessage, type, status, priority, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO "HelpSession" (id, "userId", title, "sessionRecap", completed, "lastMessage", type, status, priority, "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     RETURNING *`,
     [
       id,
       userId,
@@ -89,7 +96,7 @@ export async function createHelpSession(sessionData) {
   );
 
   console.log("Help session created:", result);
-  return { id, ...sessionData };
+  return result[0];
 }
 
 /**
@@ -99,27 +106,38 @@ export async function updateHelpSession(id, sessionData) {
   const fields = Object.keys(sessionData);
   const values = Object.values(sessionData);
 
-  // Add updatedAt field
-  fields.push("updatedAt");
-  values.push(new Date());
+  // Ensure updatedAt is set (replace if already exists)
+  const updatedAtIndex = fields.indexOf("updatedAt");
+  if (updatedAtIndex !== -1) {
+    values[updatedAtIndex] = new Date();
+  } else {
+    fields.push("updatedAt");
+    values.push(new Date());
+  }
 
-  const setClause = fields.map((field) => `${field} = ?`).join(", ");
+  const setClause = fields
+    .map((field, idx) => `"${field}" = $${idx + 1}`)
+    .join(", ");
 
   const result = await query(
-    `UPDATE HelpSession SET ${setClause} WHERE id = ?`,
+    `UPDATE "HelpSession" SET ${setClause} WHERE id = $${
+      fields.length + 1
+    } RETURNING *`,
     [...values, id]
   );
 
   console.log("Help session updated:", result);
-  return { id, ...sessionData, updatedAt: new Date() };
+  return result[0];
 }
 
 /**
  * Delete a help session
  */
 export async function deleteHelpSession(id) {
-  const result = await query("DELETE FROM HelpSession WHERE id = ?", [id]);
-  return result.affectedRows > 0;
+  const result = await pool.query('DELETE FROM "HelpSession" WHERE id = $1', [
+    id,
+  ]);
+  return result.rowCount > 0;
 }
 
 /**
@@ -127,7 +145,7 @@ export async function deleteHelpSession(id) {
  */
 export async function getRecentHelpSessions(limit = 10) {
   return await query(
-    "SELECT * FROM HelpSession ORDER BY createdAt DESC LIMIT ?",
+    'SELECT * FROM "HelpSession" ORDER BY "createdAt" DESC LIMIT $1',
     [limit]
   );
 }
@@ -137,7 +155,7 @@ export async function getRecentHelpSessions(limit = 10) {
  */
 export async function countHelpSessionsByStatus(status) {
   const result = await query(
-    "SELECT COUNT(*) as count FROM HelpSession WHERE status = ?",
+    'SELECT COUNT(*)::int as count FROM "HelpSession" WHERE status = $1',
     [status]
   );
   return result[0].count;
@@ -156,7 +174,7 @@ export async function getHelpSessionWithMessages(sessionId) {
 
   // Get associated messages
   const messages = await query(
-    "SELECT * FROM Message WHERE helpSessionId = ? ORDER BY createdAt ASC",
+    'SELECT * FROM "Message" WHERE "helpSessionId" = $1 ORDER BY "createdAt" ASC',
     [sessionId]
   );
 
@@ -178,7 +196,7 @@ export async function getAllHelpSessionsWithMessages() {
   const sessionsWithMessages = await Promise.all(
     sessions.map(async (session) => {
       const messages = await query(
-        "SELECT * FROM Message WHERE helpSessionId = ? ORDER BY createdAt ASC",
+        'SELECT * FROM "Message" WHERE "helpSessionId" = $1 ORDER BY "createdAt" ASC',
         [session.id]
       );
 
@@ -203,7 +221,7 @@ export async function getHelpSessionsWithMessagesByUserId(userId) {
   const sessionsWithMessages = await Promise.all(
     sessions.map(async (session) => {
       const messages = await query(
-        "SELECT * FROM Message WHERE helpSessionId = ? ORDER BY createdAt ASC",
+        'SELECT * FROM "Message" WHERE "helpSessionId" = $1 ORDER BY "createdAt" ASC',
         [session.id]
       );
 
@@ -225,7 +243,7 @@ export async function getLastDayHelpSessions(userId) {
   oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
   return await query(
-    "SELECT * FROM HelpSession WHERE userId = ? AND createdAt >= ? ORDER BY createdAt DESC",
+    'SELECT * FROM "HelpSession" WHERE "userId" = $1 AND "createdAt" >= $2 ORDER BY "createdAt" DESC',
     [userId, oneDayAgo]
   );
 }
@@ -238,7 +256,7 @@ export async function getLastWeekHelpSessions(userId) {
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
   return await query(
-    "SELECT * FROM HelpSession WHERE userId = ? AND createdAt >= ? AND createdAt < ? ORDER BY createdAt DESC",
+    'SELECT * FROM "HelpSession" WHERE "userId" = $1 AND "createdAt" >= $2 AND "createdAt" < $3 ORDER BY "createdAt" DESC',
     [userId, oneWeekAgo, getOneDayAgo()]
   );
 }
@@ -253,7 +271,7 @@ export async function getLastMonthHelpSessions(userId) {
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
   return await query(
-    "SELECT * FROM HelpSession WHERE userId = ? AND createdAt >= ? AND createdAt < ? ORDER BY createdAt DESC",
+    'SELECT * FROM "HelpSession" WHERE "userId" = $1 AND "createdAt" >= $2 AND "createdAt" < $3 ORDER BY "createdAt" DESC',
     [userId, oneMonthAgo, oneWeekAgo]
   );
 }
@@ -266,7 +284,7 @@ export async function getOlderHelpSessions(userId) {
   oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
 
   return await query(
-    "SELECT * FROM HelpSession WHERE userId = ? AND createdAt < ? ORDER BY createdAt DESC",
+    'SELECT * FROM "HelpSession" WHERE "userId" = $1 AND "createdAt" < $2 ORDER BY "createdAt" DESC',
     [userId, oneMonthAgo]
   );
 }
@@ -289,7 +307,7 @@ export async function getWeeklySessionCount(userId) {
 
   // Get sessions created this week
   const sessionsThisWeek = await query(
-    "SELECT COUNT(*) as count FROM HelpSession WHERE userId = ? AND createdAt >= ? AND createdAt < ?",
+    'SELECT COUNT(*)::int as count FROM "HelpSession" WHERE "userId" = $1 AND "createdAt" >= $2 AND "createdAt" < $3',
     [userId, startOfWeek, endOfWeek]
   );
 
@@ -302,7 +320,7 @@ export async function getWeeklySessionCount(userId) {
 export async function getAverageSessionDuration(userId) {
   // Try to get all completed sessions
   const completedSessions = await query(
-    "SELECT *, TIMESTAMPDIFF(MINUTE, createdAt, updatedAt) as sessionDuration FROM HelpSession WHERE userId = ? AND completed = 1",
+    'SELECT *, EXTRACT(EPOCH FROM ("updatedAt" - "createdAt"))/60 as "sessionDuration" FROM "HelpSession" WHERE "userId" = $1 AND completed = TRUE',
     [userId]
   );
 
@@ -315,14 +333,14 @@ export async function getAverageSessionDuration(userId) {
   let validSessions = 0;
 
   for (const session of completedSessions) {
-    // If we have a sessionDuration calculated by MySQL, use it
+    // If we have a sessionDuration calculated by PostgreSQL, use it
     if (session.sessionDuration > 0) {
       totalDuration += session.sessionDuration;
       validSessions++;
     } else {
       // Fallback to calculating duration from messages if available
       const messages = await query(
-        "SELECT MIN(createdAt) as firstMessage, MAX(createdAt) as lastMessage FROM Message WHERE helpSessionId = ?",
+        'SELECT MIN("createdAt") as "firstMessage", MAX("createdAt") as "lastMessage" FROM "Message" WHERE "helpSessionId" = $1',
         [session.id]
       );
 

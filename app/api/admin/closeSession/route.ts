@@ -48,15 +48,23 @@ export async function POST(request: NextRequest) {
     const sessionData = await helpSessions.getHelpSessionWithMessages(
       helpSessionId
     );
+
+    if (!sessionData) {
+      return NextResponse.json(
+        { error: "Session data not found" },
+        { status: 404 }
+      );
+    }
+
     const allMessages = sessionData.messages;
 
     let sessionRecap = customRecap;
-    let newTitle = helpSession.title;
+    let newTitle = (helpSession as any).title;
 
     // If no custom recap is provided, generate one using OpenAI
     if (!customRecap) {
       // Format messages for GPT prompt
-      const formattedMessages = allMessages
+      const formattedMessages = (allMessages as any[])
         .map(
           (msg: { isAdmin: any; content: any }) =>
             `${msg.isAdmin ? "Support Agent" : "User"}: ${msg.content}`
@@ -117,13 +125,13 @@ export async function POST(request: NextRequest) {
     const updatedSession = await helpSessions.updateHelpSession(helpSessionId, {
       completed: true,
       sessionRecap,
-      title: newTitle || helpSession.title,
+      title: newTitle || (helpSession as any).title,
       status: "completed",
       updatedAt: new Date(),
     });
 
     // If this is an SMS session, send a closing message to the external API
-    if (helpSession.type === "sms") {
+    if ((helpSession as any).type === "sms") {
       try {
         // Prepare closing message
         const closingMessage =
@@ -138,7 +146,7 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             sessionId: helpSessionId,
             message: closingMessage,
-            userId: helpSession.userId,
+            userId: (helpSession as any).userId,
             sessionClosed: true,
           }),
         });

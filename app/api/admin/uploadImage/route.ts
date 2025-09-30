@@ -1,14 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-
-// Configure AWS S3 client
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
-  },
-});
+import { put } from "@vercel/blob";
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,33 +37,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert file to ArrayBuffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
     // Generate a unique filename
     const fileExtension = file.name.split(".").pop();
     const fileName = `admin-${Date.now()}-${Math.random()
       .toString(36)
       .substring(2, 15)}.${fileExtension}`;
 
-    // Path in S3 bucket (using eldrix folder as specified)
-    const s3Key = `eldrix/${fileName}`;
+    // Upload to Vercel Blob
+    const blob = await put(`eldrix/${fileName}`, file, {
+      access: "public",
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    });
 
-    // Upload to S3
-    const uploadParams = {
-      Bucket: process.env.AWS_BUCKET_NAME || "",
-      Key: s3Key,
-      Body: buffer,
-      ContentType: file.type,
-    };
-
-    await s3Client.send(new PutObjectCommand(uploadParams));
-
-    // Create the S3 URL
-    const s3Url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
-
-    return NextResponse.json({ url: s3Url });
+    return NextResponse.json({ url: blob.url });
   } catch (error) {
     console.error("Error uploading image:", error);
     return NextResponse.json(

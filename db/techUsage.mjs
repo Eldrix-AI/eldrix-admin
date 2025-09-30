@@ -1,15 +1,17 @@
-import mysql from "mysql2/promise";
+import pkg from "pg";
+const { Pool } = pkg;
 import { v4 as uuidv4 } from "uuid";
 
 // Create a connection pool
-const pool = mysql.createPool({
-  host:
-    process.env.DB_HOST || "eldrix.c3u0owce2vpi.us-east-2.rds.amazonaws.com",
-  user: process.env.DB_USER || "admin",
-  password: process.env.DB_PASSWORD || "B99U7lu2sYcOzCk1HWSG",
-  database: process.env.DB_NAME || "eldrix-prod",
-  port: parseInt(process.env.DB_PORT || "3306"),
-  connectionLimit: 10,
+const pool = new Pool({
+  connectionString:
+    process.env.DATABASE_URL ||
+    "postgresql://neondb_owner:npg_R4PlognbL8qm@ep-winter-river-adogkt3g-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require",
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  connectionTimeoutMillis: 30000, // 30 seconds
+  idleTimeoutMillis: 30000, // 30 seconds
+  query_timeout: 30000, // 30 seconds
 });
 
 /**
@@ -23,8 +25,8 @@ async function query(sql, params = []) {
     console.log("SQL:", sql);
     console.log("Params:", JSON.stringify(safeParams));
 
-    const [rows] = await pool.execute(sql, safeParams);
-    return rows;
+    const result = await pool.query(sql, safeParams);
+    return result.rows;
   } catch (error) {
     console.error("Database query error:", error);
     throw error;
@@ -35,14 +37,14 @@ async function query(sql, params = []) {
  * Get all tech usage items
  */
 export async function getAllTechUsages() {
-  return await query("SELECT * FROM TechUsage");
+  return await query('SELECT * FROM "TechUsage"');
 }
 
 /**
  * Get tech usage by ID
  */
 export async function getTechUsageById(id) {
-  const items = await query("SELECT * FROM TechUsage WHERE id = ?", [id]);
+  const items = await query('SELECT * FROM "TechUsage" WHERE id = $1', [id]);
   return items[0] || null;
 }
 
@@ -50,7 +52,7 @@ export async function getTechUsageById(id) {
  * Get all tech usage items for a specific user
  */
 export async function getTechUsagesByUserId(userId) {
-  return await query("SELECT * FROM TechUsage WHERE userId = ?", [userId]);
+  return await query('SELECT * FROM "TechUsage" WHERE "userId" = $1', [userId]);
 }
 
 /**
@@ -68,13 +70,14 @@ export async function createTechUsage(data) {
   } = data;
 
   const result = await query(
-    `INSERT INTO TechUsage (id, userId, deviceType, deviceName, skillLevel, usageFrequency, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO "TechUsage" (id, "userId", "deviceType", "deviceName", "skillLevel", "usageFrequency", notes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
     [id, userId, deviceType, deviceName, skillLevel, usageFrequency, notes]
   );
 
   console.log("Tech usage item created:", result);
-  return { id, ...data };
+  return result[0];
 }
 
 /**
@@ -84,33 +87,40 @@ export async function updateTechUsage(id, data) {
   const fields = Object.keys(data);
   const values = Object.values(data);
 
-  const setClause = fields.map((field) => `${field} = ?`).join(", ");
+  const setClause = fields
+    .map((field, idx) => `"${field}" = $${idx + 1}`)
+    .join(", ");
 
-  const result = await query(`UPDATE TechUsage SET ${setClause} WHERE id = ?`, [
-    ...values,
-    id,
-  ]);
+  const result = await query(
+    `UPDATE "TechUsage" SET ${setClause} WHERE id = $${
+      fields.length + 1
+    } RETURNING *`,
+    [...values, id]
+  );
 
   console.log("Tech usage item updated:", result);
-  return { id, ...data };
+  return result[0];
 }
 
 /**
  * Delete a tech usage item
  */
 export async function deleteTechUsage(id) {
-  const result = await query("DELETE FROM TechUsage WHERE id = ?", [id]);
-  return result.affectedRows > 0;
+  const result = await pool.query('DELETE FROM "TechUsage" WHERE id = $1', [
+    id,
+  ]);
+  return result.rowCount > 0;
 }
 
 /**
  * Delete all tech usage items for a user
  */
 export async function deleteAllUserTechUsages(userId) {
-  const result = await query("DELETE FROM TechUsage WHERE userId = ?", [
-    userId,
-  ]);
-  return result.affectedRows;
+  const result = await pool.query(
+    'DELETE FROM "TechUsage" WHERE "userId" = $1',
+    [userId]
+  );
+  return result.rowCount;
 }
 
 /**
@@ -118,9 +128,9 @@ export async function deleteAllUserTechUsages(userId) {
  */
 export async function getTechUsageStatsByType() {
   return await query(`
-    SELECT deviceType, COUNT(*) as count 
-    FROM TechUsage 
-    GROUP BY deviceType 
+    SELECT "deviceType", COUNT(*)::int as count 
+    FROM "TechUsage" 
+    GROUP BY "deviceType" 
     ORDER BY count DESC
   `);
 }
@@ -130,9 +140,9 @@ export async function getTechUsageStatsByType() {
  */
 export async function getTechUsageStatsBySkillLevel() {
   return await query(`
-    SELECT skillLevel, COUNT(*) as count 
-    FROM TechUsage 
-    GROUP BY skillLevel 
+    SELECT "skillLevel", COUNT(*)::int as count 
+    FROM "TechUsage" 
+    GROUP BY "skillLevel" 
     ORDER BY count DESC
   `);
 }

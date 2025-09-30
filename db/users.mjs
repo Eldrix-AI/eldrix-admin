@@ -1,14 +1,16 @@
-import mysql from "mysql2/promise";
+import pkg from "pg";
+const { Pool } = pkg;
 
 // Create a connection pool
-const pool = mysql.createPool({
-  host:
-    process.env.DB_HOST || "eldrix.c3u0owce2vpi.us-east-2.rds.amazonaws.com",
-  user: process.env.DB_USER || "admin",
-  password: process.env.DB_PASSWORD || "B99U7lu2sYcOzCk1HWSG",
-  database: process.env.DB_NAME || "eldrix-prod",
-  port: parseInt(process.env.DB_PORT || "3306"),
-  connectionLimit: 10,
+const pool = new Pool({
+  connectionString:
+    process.env.DATABASE_URL ||
+    "postgresql://neondb_owner:npg_R4PlognbL8qm@ep-winter-river-adogkt3g-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require",
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  connectionTimeoutMillis: 30000, // 30 seconds
+  idleTimeoutMillis: 30000, // 30 seconds
+  query_timeout: 30000, // 30 seconds
 });
 
 /**
@@ -22,8 +24,8 @@ async function query(sql, params = []) {
     console.log("SQL:", sql);
     console.log("Params:", JSON.stringify(safeParams));
 
-    const [rows] = await pool.execute(sql, safeParams);
-    return rows;
+    const result = await pool.query(sql, safeParams);
+    return result.rows;
   } catch (error) {
     console.error("Database query error:", error);
     throw error;
@@ -34,14 +36,14 @@ async function query(sql, params = []) {
  * Get all users
  */
 export async function getAllUsers() {
-  return await query("SELECT * FROM User");
+  return await query('SELECT * FROM "User"');
 }
 
 /**
  * Get a user by ID
  */
 export async function getUserById(id) {
-  const users = await query("SELECT * FROM User WHERE id = ?", [id]);
+  const users = await query('SELECT * FROM "User" WHERE id = $1', [id]);
   return users[0] || null;
 }
 
@@ -49,7 +51,7 @@ export async function getUserById(id) {
  * Get a user by email
  */
 export async function getUserByEmail(email) {
-  const users = await query("SELECT * FROM User WHERE email = ?", [email]);
+  const users = await query('SELECT * FROM "User" WHERE email = $1', [email]);
   return users[0] || null;
 }
 
@@ -75,10 +77,11 @@ export async function createUser(userData) {
   } = userData;
 
   const result = await query(
-    `INSERT INTO User (id, name, email, password, phone, imageUrl, description, 
-     smsConsent, emailList, age, techUsage, accessibilityNeeds, 
-     preferredContactMethod, experienceLevel)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO "User" (id, name, email, password, phone, "imageUrl", description, 
+     "smsConsent", "emailList", age, "techUsage", "accessibilityNeeds", 
+     "preferredContactMethod", "experienceLevel")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+     RETURNING *`,
     [
       id,
       name,
@@ -87,8 +90,8 @@ export async function createUser(userData) {
       phone || null,
       imageUrl || null,
       description,
-      smsConsent ? 1 : 0,
-      emailList ? 1 : 0,
+      smsConsent ? true : false,
+      emailList ? true : false,
       age,
       techUsage,
       accessibilityNeeds,
@@ -98,7 +101,7 @@ export async function createUser(userData) {
   );
 
   console.log("User created:", result);
-  return { id, ...userData };
+  return result[0];
 }
 
 /**
@@ -108,30 +111,34 @@ export async function updateUser(id, userData) {
   const fields = Object.keys(userData);
   const values = Object.values(userData);
 
-  const setClause = fields.map((field) => `${field} = ?`).join(", ");
+  const setClause = fields
+    .map((field, idx) => `"${field}" = $${idx + 1}`)
+    .join(", ");
 
-  const result = await query(`UPDATE User SET ${setClause} WHERE id = ?`, [
-    ...values,
-    id,
-  ]);
+  const result = await query(
+    `UPDATE "User" SET ${setClause} WHERE id = $${
+      fields.length + 1
+    } RETURNING *`,
+    [...values, id]
+  );
 
   console.log("User updated:", result);
-  return { id, ...userData };
+  return result[0];
 }
 
 /**
  * Delete a user
  */
 export async function deleteUser(id) {
-  const result = await query("DELETE FROM User WHERE id = ?", [id]);
-  return result.affectedRows > 0;
+  const result = await pool.query('DELETE FROM "User" WHERE id = $1', [id]);
+  return result.rowCount > 0;
 }
 
 /**
  * Count total users
  */
 export async function countUsers() {
-  const result = await query("SELECT COUNT(*) as count FROM User");
+  const result = await query('SELECT COUNT(*)::int as count FROM "User"');
   return result[0].count;
 }
 
@@ -142,42 +149,42 @@ export async function updateUserNotificationSetting(
   userId,
   notificationEnabled
 ) {
-  const result = await query(`UPDATE User SET notification = ? WHERE id = ?`, [
-    notificationEnabled ? 1 : 0,
-    userId,
-  ]);
+  const result = await pool.query(
+    `UPDATE "User" SET notification = $1 WHERE id = $2`,
+    [notificationEnabled ? true : false, userId]
+  );
 
   console.log(
     `Updated notification setting for user ${userId} to ${notificationEnabled}`
   );
-  return result.affectedRows > 0;
+  return result.rowCount > 0;
 }
 
 /**
  * Update user dark mode setting
  */
 export async function updateUserDarkModeSetting(userId, darkModeEnabled) {
-  const result = await query(`UPDATE User SET darkMode = ? WHERE id = ?`, [
-    darkModeEnabled ? 1 : 0,
-    userId,
-  ]);
+  const result = await pool.query(
+    `UPDATE "User" SET "darkMode" = $1 WHERE id = $2`,
+    [darkModeEnabled ? true : false, userId]
+  );
 
   console.log(
     `Updated dark mode setting for user ${userId} to ${darkModeEnabled}`
   );
-  return result.affectedRows > 0;
+  return result.rowCount > 0;
 }
 
 /**
  * Get users with notification enabled
  */
 export async function getUsersWithNotificationsEnabled() {
-  return await query("SELECT * FROM User WHERE notification = TRUE");
+  return await query('SELECT * FROM "User" WHERE notification = TRUE');
 }
 
 /**
  * Get users with dark mode enabled
  */
 export async function getUsersWithDarkModeEnabled() {
-  return await query("SELECT * FROM User WHERE darkMode = TRUE");
+  return await query('SELECT * FROM "User" WHERE "darkMode" = TRUE');
 }

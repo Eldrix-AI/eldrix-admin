@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Create the user in the database
-    const newUser = await users.createUser(userData);
+    const newUser = (await users.createUser(userData)) as any;
 
     // Send email and SMS with setup link
     const setupLink = `http://localhost:3001/accountSetup?email=${encodeURIComponent(
@@ -153,10 +153,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       message: "User created successfully",
       user: {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        phone: newUser.phone,
+        id: (newUser as any).id,
+        name: (newUser as any).name,
+        email: (newUser as any).email,
+        phone: (newUser as any).phone,
       },
       notifications: {
         emailSent,

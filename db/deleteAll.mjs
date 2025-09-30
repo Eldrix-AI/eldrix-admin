@@ -1,14 +1,16 @@
-import mysql from "mysql2/promise";
+import pkg from "pg";
+const { Pool } = pkg;
 
 // Create a connection pool
-const pool = mysql.createPool({
-  host:
-    process.env.DB_HOST || "eldrix.c3u0owce2vpi.us-east-2.rds.amazonaws.com",
-  user: process.env.DB_USER || "admin",
-  password: process.env.DB_PASSWORD || "B99U7lu2sYcOzCk1HWSG",
-  database: process.env.DB_NAME || "eldrix-prod",
-  port: parseInt(process.env.DB_PORT || "3306"),
-  connectionLimit: 10,
+const pool = new Pool({
+  connectionString:
+    process.env.DATABASE_URL ||
+    "postgresql://neondb_owner:npg_R4PlognbL8qm@ep-winter-river-adogkt3g-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require",
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  connectionTimeoutMillis: 30000, // 30 seconds
+  idleTimeoutMillis: 30000, // 30 seconds
+  query_timeout: 30000, // 30 seconds
 });
 
 /**
@@ -22,8 +24,8 @@ async function query(sql, params = []) {
     console.log("SQL:", sql);
     console.log("Params:", JSON.stringify(safeParams));
 
-    const [rows] = await pool.execute(sql, safeParams);
-    return rows;
+    const result = await pool.query(sql, safeParams);
+    return result.rows;
   } catch (error) {
     console.error("Database query error:", error);
     throw error;
@@ -48,17 +50,17 @@ export async function deleteAllRecords(tableName, confirm = false) {
   try {
     // First count the records to be deleted
     const countResult = await query(
-      `SELECT COUNT(*) as count FROM ${tableName}`
+      `SELECT COUNT(*)::int as count FROM "${tableName}"`
     );
     const count = countResult[0].count;
 
     // Proceed with deletion
-    const result = await query(`DELETE FROM ${tableName}`);
+    const result = await pool.query(`DELETE FROM "${tableName}"`);
 
     console.log(
-      `DELETED ALL RECORDS: Removed ${result.affectedRows} records from ${tableName}`
+      `DELETED ALL RECORDS: Removed ${result.rowCount} records from ${tableName}`
     );
-    return result.affectedRows;
+    return result.rowCount;
   } catch (error) {
     console.error(`Error deleting all records from ${tableName}:`, error);
     throw error;
@@ -81,7 +83,7 @@ export async function truncateTable(tableName, confirm = false) {
   }
 
   try {
-    await query(`TRUNCATE TABLE ${tableName}`);
+    await pool.query(`TRUNCATE TABLE "${tableName}" CASCADE`);
     console.log(`TRUNCATED TABLE: ${tableName} has been completely cleared`);
     return true;
   } catch (error) {
@@ -107,18 +109,15 @@ export async function resetDatabase(tableNames, confirm = false) {
 
   const results = {};
 
-  // Start a transaction
-  const connection = await pool.getConnection();
+  // Get a client from the pool to use for the transaction
+  const client = await pool.connect();
   try {
-    await connection.beginTransaction();
+    await client.query("BEGIN");
 
-    // Temporarily disable foreign key checks
-    await connection.query("SET FOREIGN_KEY_CHECKS = 0");
-
-    // Truncate all specified tables
+    // Truncate all specified tables (CASCADE will handle foreign keys)
     for (const tableName of tableNames) {
       try {
-        await connection.query(`TRUNCATE TABLE ${tableName}`);
+        await client.query(`TRUNCATE TABLE "${tableName}" CASCADE`);
         results[tableName] = "Truncated";
       } catch (error) {
         console.error(`Error truncating ${tableName}:`, error);
@@ -126,20 +125,17 @@ export async function resetDatabase(tableNames, confirm = false) {
       }
     }
 
-    // Re-enable foreign key checks
-    await connection.query("SET FOREIGN_KEY_CHECKS = 1");
-
     // Commit the transaction
-    await connection.commit();
+    await client.query("COMMIT");
     console.log("DATABASE RESET COMPLETED SUCCESSFULLY");
   } catch (error) {
     // Rollback on error
-    await connection.rollback();
+    await client.query("ROLLBACK");
     console.error("DATABASE RESET FAILED:", error);
     throw error;
   } finally {
-    // Always release connection
-    connection.release();
+    // Always release client
+    client.release();
   }
 
   return results;

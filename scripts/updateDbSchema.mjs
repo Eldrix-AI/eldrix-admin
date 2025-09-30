@@ -1,15 +1,14 @@
-import mysql from "mysql2/promise";
+import pkg from "pg";
+const { Pool } = pkg;
 import { v4 as uuidv4 } from "uuid";
 
 // Create a connection pool
-const pool = mysql.createPool({
-  host:
-    process.env.DB_HOST || "eldrix.c3u0owce2vpi.us-east-2.rds.amazonaws.com",
-  user: process.env.DB_USER || "admin",
-  password: process.env.DB_PASSWORD || "B99U7lu2sYcOzCk1HWSG",
-  database: process.env.DB_NAME || "eldrix-prod",
-  port: parseInt(process.env.DB_PORT || "3306"),
-  connectionLimit: 10,
+const pool = new Pool({
+  connectionString:
+    process.env.DATABASE_URL ||
+    "postgresql://neondb_owner:npg_R4PlognbL8qm@ep-winter-river-adogkt3g-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require",
+  ssl: { rejectUnauthorized: false },
+  max: 10,
 });
 
 async function execute(sql, params = []) {
@@ -20,9 +19,9 @@ async function execute(sql, params = []) {
       console.log("Params:", JSON.stringify(params));
     }
 
-    const [result] = await pool.execute(sql, params);
-    console.log("Result:", JSON.stringify(result));
-    return result;
+    const result = await pool.query(sql, params);
+    console.log("Result:", JSON.stringify(result.rows));
+    return result.rows;
   } catch (error) {
     console.error("Error executing query:", error.message);
     throw error;
@@ -35,18 +34,18 @@ async function updateUserTable() {
 
     // Check if columns already exist
     const columns = await execute(`
-      SELECT COLUMN_NAME 
-      FROM INFORMATION_SCHEMA.COLUMNS 
-      WHERE TABLE_NAME = 'User' 
-      AND TABLE_SCHEMA = DATABASE()
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'User' 
+      AND table_schema = 'public'
     `);
 
-    const columnNames = columns.map((col) => col.COLUMN_NAME);
+    const columnNames = columns.map((col) => col.column_name);
 
     // Add notification column if it doesn't exist
     if (!columnNames.includes("notification")) {
       await execute(`
-        ALTER TABLE User 
+        ALTER TABLE "User" 
         ADD COLUMN notification BOOLEAN NOT NULL DEFAULT FALSE
       `);
       console.log("Added notification column to User table");
@@ -57,8 +56,8 @@ async function updateUserTable() {
     // Add darkMode column if it doesn't exist
     if (!columnNames.includes("darkMode")) {
       await execute(`
-        ALTER TABLE User 
-        ADD COLUMN darkMode BOOLEAN NOT NULL DEFAULT FALSE
+        ALTER TABLE "User" 
+        ADD COLUMN "darkMode" BOOLEAN NOT NULL DEFAULT FALSE
       `);
       console.log("Added darkMode column to User table");
     } else {
@@ -78,28 +77,27 @@ async function createTechUsageTable() {
 
     // Check if TechUsage table exists
     const tables = await execute(`
-      SELECT TABLE_NAME 
-      FROM INFORMATION_SCHEMA.TABLES 
-      WHERE TABLE_NAME = 'TechUsage' 
-      AND TABLE_SCHEMA = DATABASE()
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_name = 'TechUsage' 
+      AND table_schema = 'public'
     `);
 
     if (tables.length === 0) {
-      // Create TechUsage table with matching collation for userId
+      // Create TechUsage table
       await execute(`
-        CREATE TABLE TechUsage (
-          id VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL,
-          userId VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL,
-          deviceType VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL,
-          deviceName VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL,
-          skillLevel VARCHAR(191) COLLATE utf8mb4_unicode_ci DEFAULT 'beginner',
-          usageFrequency VARCHAR(191) COLLATE utf8mb4_unicode_ci DEFAULT 'rarely',
-          notes TEXT COLLATE utf8mb4_unicode_ci,
-          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          PRIMARY KEY (id),
-          FOREIGN KEY (userId) REFERENCES User(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        CREATE TABLE "TechUsage" (
+          id VARCHAR(191) NOT NULL PRIMARY KEY,
+          "userId" VARCHAR(191) NOT NULL,
+          "deviceType" VARCHAR(191) NOT NULL,
+          "deviceName" VARCHAR(191) NOT NULL,
+          "skillLevel" VARCHAR(191) DEFAULT 'beginner',
+          "usageFrequency" VARCHAR(191) DEFAULT 'rarely',
+          notes TEXT,
+          "createdAt" TIMESTAMP DEFAULT now(),
+          "updatedAt" TIMESTAMP DEFAULT now(),
+          FOREIGN KEY ("userId") REFERENCES "User"(id) ON DELETE CASCADE
+        )
       `);
       console.log("Created TechUsage table");
     } else {
@@ -117,9 +115,9 @@ async function migrateExistingTechUsageData() {
 
     // Get all users with techUsage data
     const users = await execute(`
-      SELECT id, techUsage 
-      FROM User 
-      WHERE techUsage IS NOT NULL AND techUsage != '[]' AND techUsage != ''
+      SELECT id, "techUsage" 
+      FROM "User" 
+      WHERE "techUsage" IS NOT NULL AND "techUsage" != '[]' AND "techUsage" != ''
     `);
 
     console.log(`Found ${users.length} users with techUsage data to migrate`);
@@ -153,8 +151,8 @@ async function migrateExistingTechUsageData() {
 
           await execute(
             `
-            INSERT INTO TechUsage (id, userId, deviceType, deviceName)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO "TechUsage" (id, "userId", "deviceType", "deviceName")
+            VALUES ($1, $2, $3, $4)
           `,
             [id, user.id, deviceType, deviceName]
           );
@@ -200,6 +198,8 @@ async function main() {
   } catch (error) {
     console.error("\n!!! DATABASE SCHEMA UPDATE FAILED !!!", error);
   } finally {
+    // Close the pool
+    await pool.end();
     // Exit the process when done
     process.exit(0);
   }
