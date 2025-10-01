@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 
-const AccountSetup = () => {
+const AccountSetupContent = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -169,6 +169,20 @@ const AccountSetup = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const AccountSetup = () => {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          Loading...
+        </div>
+      }
+    >
+      <AccountSetupContent />
+    </Suspense>
   );
 };
 

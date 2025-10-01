@@ -90,24 +90,27 @@ const ChatPage = () => {
   // Initial fetch will be set up after fetchSession is defined
 
   // Function to fetch user data
-  const fetchUser = async (userId: string) => {
-    try {
-      const response = await fetch(`/api/admin/users/${userId}`);
+  const fetchUser = useCallback(
+    async (userId: string) => {
+      try {
+        const response = await fetch(`/api/admin/users/${userId}`);
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          router.push("/login");
-          return;
+        if (!response.ok) {
+          if (response.status === 401) {
+            router.push("/login");
+            return;
+          }
+          throw new Error(`Error: ${response.status}`);
         }
-        throw new Error(`Error: ${response.status}`);
-      }
 
-      const userData = await response.json();
-      setUser(userData);
-    } catch (err) {
-      console.error("Error fetching user:", err);
-    }
-  };
+        const userData = await response.json();
+        setUser(userData);
+      } catch (err) {
+        console.error("Error fetching user:", err);
+      }
+    },
+    [router]
+  );
 
   // Function to fetch recordings
   const fetchRecordings = async () => {
@@ -196,13 +199,13 @@ const ChatPage = () => {
         }
       } catch (err) {
         console.error("Error fetching session:", err);
-        if (!session) {
+        if (isInitialLoad) {
           setError("Failed to load session");
           setLoading(false);
         }
       }
     },
-    [sessionId, router]
+    [sessionId, router, fetchUser]
   );
 
   // Initial fetch
