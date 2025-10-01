@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 
 interface User {
   id: string;
@@ -48,13 +48,14 @@ interface HelpSession {
   messages: Message[];
 }
 
-const UserProfile = ({ params }: { params: { id: string } }) => {
+const UserProfile = () => {
   const [user, setUser] = useState<User | null>(null);
   const [conversations, setConversations] = useState<HelpSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [conversationsLoading, setConversationsLoading] = useState(true);
   const [error, setError] = useState("");
   const router = useRouter();
+  const params = useParams<{ id: string }>();
 
   // Fetch user data from API
   useEffect(() => {

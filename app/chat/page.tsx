@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef, Suspense } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  Suspense,
+  useCallback,
+} from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -81,30 +87,7 @@ const ChatPage = () => {
   // To track if we've just sent a message
   const [justSentMessage, setJustSentMessage] = useState(false);
 
-  // Initial fetch
-  useEffect(() => {
-    if (!sessionId) {
-      router.push("/");
-      return;
-    }
-
-    // Initial fetch
-    fetchSession(true);
-
-    // Set up polling interval (every 3 seconds)
-    const intervalId = setInterval(() => {
-      // Only fetch if we haven't just sent a message (to prevent double display)
-      if (!justSentMessage) {
-        fetchSession();
-      } else {
-        // Reset the flag after skipping one poll
-        setJustSentMessage(false);
-      }
-    }, 3000);
-
-    // Clean up interval on unmount
-    return () => clearInterval(intervalId);
-  }, [sessionId, router, justSentMessage]);
+  // Initial fetch will be set up after fetchSession is defined
 
   // Function to fetch user data
   const fetchUser = async (userId: string) => {
@@ -151,73 +134,101 @@ const ChatPage = () => {
   };
 
   // Function to fetch session data
-  const fetchSession = async (isInitialLoad = false) => {
-    if (!sessionId) return;
+  const fetchSession = useCallback(
+    async (isInitialLoad = false) => {
+      if (!sessionId) return;
 
-    try {
-      const response = await fetch(`/api/admin/sessions/${sessionId}`);
+      try {
+        const response = await fetch(`/api/admin/sessions/${sessionId}`);
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          router.push("/login");
-          return;
-        }
-        throw new Error(`Error: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (!data) return;
-
-      // On initial load, set the session and fetch user data
-      if (isInitialLoad) {
-        setSession(data);
-        setLoading(false);
-
-        // Fetch user data for this session
-        if (data.userId) {
-          await fetchUser(data.userId);
-        }
-
-        // Scroll to bottom on initial load to show newest messages
-        setTimeout(() => {
-          if (messagesContainerRef.current) {
-            messagesContainerRef.current.scrollTop =
-              messagesContainerRef.current.scrollHeight;
+        if (!response.ok) {
+          if (response.status === 401) {
+            router.push("/login");
+            return;
           }
-        }, 100);
-      } else if (session) {
-        // For subsequent polls, just update the data and maintain scroll position
-        const wasAtTop = messagesContainerRef.current?.scrollTop === 0;
-        const prevHeight = messagesContainerRef.current?.scrollHeight || 0;
+          throw new Error(`Error: ${response.status}`);
+        }
 
-        setSession(data);
+        const data = await response.json();
 
-        // If we were at the bottom, keep us at the bottom to see newest messages
-        const isAtBottom =
-          messagesContainerRef.current &&
-          messagesContainerRef.current.scrollHeight -
-            messagesContainerRef.current.scrollTop -
-            messagesContainerRef.current.clientHeight <
-            20;
+        if (!data) return;
 
-        if (isAtBottom) {
+        // On initial load, set the session and fetch user data
+        if (isInitialLoad) {
+          setSession(data);
+          setLoading(false);
+
+          // Fetch user data for this session
+          if (data.userId) {
+            await fetchUser(data.userId);
+          }
+
+          // Scroll to bottom on initial load to show newest messages
           setTimeout(() => {
             if (messagesContainerRef.current) {
               messagesContainerRef.current.scrollTop =
                 messagesContainerRef.current.scrollHeight;
             }
           }, 100);
+        } else {
+          // For subsequent polls, just update the data and maintain scroll position
+          const wasAtTop = messagesContainerRef.current?.scrollTop === 0;
+          const prevHeight = messagesContainerRef.current?.scrollHeight || 0;
+
+          setSession(data);
+
+          // If we were at the bottom, keep us at the bottom to see newest messages
+          const isAtBottom =
+            messagesContainerRef.current &&
+            messagesContainerRef.current.scrollHeight -
+              messagesContainerRef.current.scrollTop -
+              messagesContainerRef.current.clientHeight <
+              20;
+
+          if (isAtBottom) {
+            setTimeout(() => {
+              if (messagesContainerRef.current) {
+                messagesContainerRef.current.scrollTop =
+                  messagesContainerRef.current.scrollHeight;
+              }
+            }, 100);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching session:", err);
+        if (!session) {
+          setError("Failed to load session");
+          setLoading(false);
         }
       }
-    } catch (err) {
-      console.error("Error fetching session:", err);
-      if (!session) {
-        setError("Failed to load session");
-        setLoading(false);
-      }
+    },
+    [sessionId, router]
+  );
+
+  // Initial fetch
+  useEffect(() => {
+    if (!sessionId) {
+      router.push("/");
+      return;
     }
-  };
+
+    // Initial fetch
+    fetchSession(true);
+
+    // Set up polling interval (every 3 seconds)
+    const intervalId = setInterval(() => {
+      // Only fetch if we haven't just sent a message (to prevent double display)
+      if (!justSentMessage) {
+        fetchSession();
+      } else {
+        // Reset the flag after skipping one poll
+        setJustSentMessage(false);
+      }
+    }, 3000);
+
+    // Clean up interval on unmount
+    return () => clearInterval(intervalId);
+  }, [sessionId, router, justSentMessage, fetchSession]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
